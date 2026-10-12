@@ -1,0 +1,1369 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Induktion Simulation 3D</title>
+  <style>
+    :root {
+      --bg: #fdf6e3;
+      --panel-bg: #eee8d5;
+      --text: #657b83;
+      --text-bold: #073642;
+      --border: #93a1a1;
+      --primary: #268bd2; /* Solarized Blau (Tab-Buttons) */
+      --accent-m: #859900; /* Grün/Oliv */
+      --volt-color: #268bd2;
+      --curr-color: #cb4b16; /* Solarized Orange */
+      --node-color: var(--curr-color);
+      --eq-bg: #073642;
+      --eq-text: #839496;
+      --eq-highlight: #b58900;
+      --eq-result: var(--primary);
+      --point-color: #dc322f; /* Solarized Rot: Nordpol, Pluspol */
+      --field-color: #6c71c4; /* Solarized Violett: Magnetfeld B */
+      --vel-color: #d33682;   /* Solarized Magenta: Geschwindigkeit v */
+      --pole-s: #859900;      /* Südpol (grün wie im Unterrichtsbild) */
+      --copper: #c8783a;      /* Leiter (Kupfer) */
+      --meter-body: #586e75;
+    }
+
+    [data-theme="dark"] {
+      --bg: #002b36;
+      --panel-bg: #073642;
+      --text: #839496;
+      --text-bold: #93a1a1;
+      --border: #586e75;
+      --primary: #2aa198;
+      --accent-m: #859900;
+      --volt-color: #268bd2;
+      --curr-color: #cb4b16;
+      --node-color: var(--curr-color);
+      --eq-bg: #001e26;
+      --eq-text: #93a1a1;
+      --eq-highlight: #b58900;
+      --eq-result: var(--primary);
+      --point-color: #dc322f;
+      --field-color: #6c71c4;
+      --vel-color: #d33682;
+      --pole-s: #859900;
+      --copper: #c8783a;
+      --meter-body: #3b5560;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 12px 16px;
+      background-color: var(--bg);
+      color: var(--text);
+      transition: background-color 0.3s, color 0.3s;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 6px;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      margin: 0;
+      color: var(--text-bold);
+      font-size: 1.25rem;
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .theme-toggle, .btn {
+      background: var(--panel-bg);
+      color: var(--text-bold);
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 0.85rem;
+    }
+
+    .btn-active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+
+    .main-layout {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 920px;
+      margin: 0 auto;
+    }
+
+    .circuit-card {
+      background: var(--panel-bg);
+      border-radius: 6px;
+      padding: 8px;
+      border: 1px solid var(--border);
+      position: relative;
+    }
+
+    .circuit-view {
+      width: 100%;
+      height: 400px;
+      background: var(--bg);
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .eq-card {
+      background: var(--eq-bg);
+      color: var(--eq-text);
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-family: "Courier New", Courier, monospace;
+      font-size: 0.88rem;
+      line-height: 1.4;
+      box-shadow: inset 0 0 6px rgba(0,0,0,0.3);
+    }
+
+    .eq-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+      gap: 12px;
+    }
+
+    .eq-block {
+      background: rgba(255,255,255,0.03);
+      padding: 8px;
+      border-radius: 4px;
+    }
+
+    .eq-block-result { border-left: 4px solid var(--eq-result); }
+    .eq-title { font-weight: bold; margin-bottom: 4px; }
+    .eq-title-result { color: var(--eq-result); }
+    .eq-sub { color: #268bd2; font-size: 0.82rem; }
+    .eq-res { color: var(--eq-result); font-weight: bold; }
+
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    .modal {
+      background: var(--panel-bg);
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      width: 280px;
+      color: var(--text-bold);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    .modal h3 { margin: 0 0 12px 0; font-size: 1rem; }
+    .modal-controls { display: flex; flex-direction: column; gap: 10px; }
+    .modal-controls input[type="number"] {
+      width: 80px;
+      padding: 4px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+    .modal-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
+
+    /* ---- Ergänzungen für die Induktions-Simulation ---- */
+    #scene3d { position: absolute; inset: 0; }
+    #scene3d canvas { display: block; touch-action: none; }
+    .label-layer { position: absolute; inset: 0; pointer-events: none; }
+    .view-legend, .view-hint { z-index: 2; }
+    .lbl {
+      font-weight: bold; font-size: 15px; line-height: 1;
+      text-shadow: 0 0 3px var(--bg), 0 0 3px var(--bg), 0 0 6px var(--bg);
+      white-space: nowrap; user-select: none;
+    }
+    .lbl sub { font-size: 0.7em; }
+    .lbl-B { color: var(--field-color); font-size: 18px; }
+    .lbl-v { color: var(--vel-color); font-size: 17px; }
+    .lbl-U { color: var(--volt-color); }
+    .lbl-dim { color: var(--text-bold); font-size: 13px; }
+    .lbl-pol { font-size: 22px; }
+    .lbl-pol.pol-plus { color: var(--point-color); }
+    .lbl-pol.pol-minus { color: var(--volt-color); }
+    .scene-error {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 3;
+      max-width: 80%; padding: 10px 14px; border-radius: 6px; font-size: 0.85rem;
+      background: var(--panel-bg); border: 1px solid var(--eq-highlight); color: var(--text-bold);
+    }
+    .badge {
+      display: inline-block; vertical-align: middle; margin-left: 6px; padding: 1px 8px;
+      border-radius: 10px; font-size: 0.7rem; border: 1px solid var(--primary); color: var(--primary);
+    }
+
+    .view-hint {
+      position: absolute; left: 8px; bottom: 6px;
+      font-size: 0.7rem; color: var(--text); opacity: 0.8;
+      pointer-events: none;
+    }
+    .view-legend {
+      position: absolute; right: 8px; top: 6px;
+      display: flex; flex-direction: column; gap: 2px;
+      font-size: 0.72rem; font-weight: bold;
+      background: var(--panel-bg); border: 1px solid var(--border);
+      border-radius: 4px; padding: 4px 8px; opacity: 0.92;
+      pointer-events: none;
+    }
+    .lg { display: flex; align-items: center; gap: 6px; color: var(--text-bold); }
+    .lg i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; }
+
+    /* Parameterleiste */
+    .param-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+      gap: 8px 16px;
+      margin-top: 8px;
+    }
+    .param {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px 10px;
+      color: var(--text-bold);
+    }
+    .param.adv { display: none; }
+    body.advanced .param.adv { display: block; }
+    .param-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 0.82rem; }
+    .param-name { font-weight: bold; }
+    .param-name small { font-weight: normal; color: var(--text); }
+    .param-val { display: flex; align-items: center; gap: 4px; font-weight: bold; font-size: 0.85rem; }
+    .param-val input {
+      width: 64px; padding: 2px 4px; border-radius: 4px;
+      border: 1px solid var(--border); background: var(--panel-bg); color: var(--text-bold);
+      font-weight: bold; text-align: right;
+    }
+    .param input[type="range"] { width: 100%; margin: 6px 0 2px 0; accent-color: var(--primary); }
+    .param-B .param-name { color: var(--field-color); }
+    .param-v .param-name { color: var(--vel-color); }
+
+    /* Plot */
+    .plot-head {
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 6px 16px; padding: 2px 4px 6px 4px;
+    }
+    .plot-title { font-weight: bold; color: var(--text-bold); font-size: 0.95rem; }
+    .live {
+      display: flex; gap: 18px; align-items: baseline; flex-wrap: wrap;
+      font-family: "Courier New", Courier, monospace;
+    }
+    .live-main { font-size: 1.45rem; font-weight: bold; color: var(--volt-color); min-width: 13ch; }
+    .live-side { font-size: 0.9rem; color: var(--text-bold); }
+    .live-side b { color: var(--vel-color); }
+    .plot-view {
+      width: 100%; height: 250px; background: var(--bg);
+      border-radius: 4px; border: 1px solid var(--border);
+    }
+    #plot { width: 100%; height: 100%; display: block; }
+
+    /* Gleichungen */
+    .eq-block-volt { border-left: 4px solid var(--volt-color); }
+    .eq-block-vel { border-left: 4px solid var(--vel-color); }
+    .eq-block-info { border-left: 4px solid var(--eq-highlight); }
+    .eq-title-volt { color: var(--volt-color); }
+    .eq-title-vel { color: var(--vel-color); }
+    .eq-res-volt { color: var(--volt-color); font-weight: bold; }
+    .eq-res-vel { color: var(--vel-color); font-weight: bold; }
+    .eq-rule { font-size: 1.05rem; font-weight: bold; padding: 4px 0 6px 0; }
+    .eq-block-volt .eq-rule { color: var(--volt-color); }
+    .eq-block-vel .eq-rule { color: var(--vel-color); }
+    .eq-step { margin: 6px 0 2px 0; }
+    .eq-step + .eq-step { border-top: 1px dashed rgba(147,161,161,0.25); padding-top: 6px; }
+    .eq-line { margin: 3px 0; line-height: 1.5; }
+    .eq-info { margin: 4px 0; }
+    .eq-info b { color: var(--eq-highlight); }
+    .eq-note { font-size: 0.78rem; opacity: 0.85; margin-top: 4px; }
+    .eq-wide { grid-column: 1 / -1; }
+    .live-num { display: inline-block; min-width: 5ch; text-align: right; }
+    .formula-table { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px 14px; margin-top: 4px; }
+    .formula-table > div { padding: 2px 0; }
+    .fB { color: var(--field-color); font-weight: bold; }
+    .fv { color: var(--vel-color); font-weight: bold; }
+    .achtung { color: var(--eq-highlight); margin-top: 8px; }
+
+    /* Bruchdarstellung */
+    .frac {
+      display: inline-flex; flex-direction: column; align-items: stretch;
+      vertical-align: middle; margin: 0 4px; line-height: 1.25;
+    }
+    .frac > span { padding: 0 4px; white-space: nowrap; text-align: center; }
+    .frac > span:first-child { border-bottom: 1px solid currentColor; }
+
+    @media (max-width: 640px) {
+      header { flex-wrap: wrap; gap: 8px; }
+      .circuit-view { height: 320px; }
+      .plot-view { height: 220px; }
+      .live-main { font-size: 1.15rem; }
+      .view-legend { font-size: 0.62rem; padding: 2px 6px; }
+      .view-hint { display: none; }
+    }
+  </style>
+</head>
+<body data-theme="dark">
+
+<header>
+  <div>
+    <h1>Induktion durch Bewegen eines Leiters <span class="badge">Three.js</span></h1>
+    <div id="sub-title" style="font-size: 0.75rem; color: var(--text);">Ziehen: drehen · Rechte Maustaste / zwei Finger: verschieben · Mausrad: zoomen. Klicken Sie auf den Magneten (B) oder den Leiter (v), um den Wert anzupassen</div>
+  </div>
+  <div class="header-controls">
+    <button class="btn btn-active" id="btn-run" onclick="toggleRun()">❚❚ Pause</button>
+    <button class="btn" onclick="resetTime()">↺ t = 0</button>
+    <button class="btn" onclick="resetView()">Ansicht zurücksetzen</button>
+    <button class="btn" id="btn-adv" onclick="toggleAdvanced()">Advanced: Aus</button>
+    <button class="theme-toggle" onclick="toggleTheme()">Dark / Light</button>
+  </div>
+</header>
+
+<div class="main-layout">
+
+  <div class="circuit-card">
+    <div class="circuit-view">
+      <div id="scene3d"></div>
+      <div class="scene-error" id="scene-error" hidden></div>
+      <div class="view-legend">
+        <span class="lg"><i style="background: var(--field-color)"></i>Magnetfeld B (N → S)</span>
+        <span class="lg"><i style="background: var(--vel-color)"></i>Geschwindigkeit v</span>
+        <span class="lg"><i style="background: var(--volt-color)"></i><span>Induzierte Spannung U<sub>i</sub></span></span>
+      </div>
+      <div class="view-hint">Doppelklick: Ansicht zurücksetzen</div>
+    </div>
+
+    <div class="param-grid" id="param-grid"></div>
+  </div>
+
+  <div class="circuit-card">
+    <div class="plot-head">
+      <div class="plot-title">Induzierte Spannung u<sub>i</sub>(t)</div>
+      <div class="live">
+        <span class="live-main" id="live-u">u<sub>i</sub> = 0.000 V</span>
+        <span class="live-side" id="live-v">v = 0.00 m/s</span>
+        <span class="live-side" id="live-t">t = 0.00 s</span>
+      </div>
+    </div>
+    <div class="plot-view"><canvas id="plot"></canvas></div>
+  </div>
+
+  <div class="eq-card">
+    <div class="eq-grid" id="equation-display"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <h3 id="modal-title">Wert anpassen</h3>
+    <div class="modal-controls">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <label for="modal-input">Wert:</label>
+        <input type="number" id="modal-input" step="0.5" oninput="syncModalInput()">
+      </div>
+      <input type="range" id="modal-slider" min="1" max="100" step="0.5" oninput="syncModalSlider()">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Fertig</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// =====================================================================
+//  Zustand
+// =====================================================================
+const values = { B: 0.8, v: 5, T: 4, N: 1, l: 0.2 };
+
+// Parameter-Definitionen (Bereich, Einheit, Anzeige)
+const PARAMS = {
+  B: { name: 'Magnetische Flussdichte', sym: 'B', unit: 'T', min: 0, max: 2, step: 0.01, digits: 2, adv: false },
+  v: { name: 'Spitzengeschwindigkeit', sym: 'v̂', unit: 'm/s', min: 0, max: 20, step: 0.1, digits: 1, adv: false },
+  T: { name: 'Periodendauer der Bewegung', sym: 'T', unit: 's', min: 1, max: 10, step: 0.5, digits: 1, adv: false },
+  N: { name: 'Windungszahl', sym: 'N', unit: '', min: 1, max: 100, step: 1, digits: 0, adv: true },
+  l: { name: 'Wirksame Leiterlänge', sym: 'ℓ', unit: 'm', min: 0.05, max: 1, step: 0.01, digits: 2, adv: true }
+};
+
+let running = true;
+let isAdvanced = false;
+let activeEditKey = null;
+let phase = 0;          // ω·t (kontinuierlich, damit T-Änderungen keinen Sprung erzeugen)
+let simT = 0;           // Simulationszeit in s
+let samples = [];       // { t, u, v } für den Plot
+let lastFrame = null;
+
+// =====================================================================
+//  Physik
+// =====================================================================
+// v(t)  = v̂ · sin(ω t)
+// u_i(t) = N · B · ℓ · v(t) = û · sin(ω t)
+// Lage des Leiters: z(t) = -ẑ · cos(ω t)  →  dz/dt ∝ sin(ω t) (gleiche Richtung wie v)
+function physics(ph) {
+  const { B, v, T, N, l } = values;
+  const omega = 2 * Math.PI / T;
+  const vt = v * Math.sin(ph);
+  const uhat = N * B * l * v;
+  const u = N * B * l * vt;
+  return { omega, f: 1 / T, vt, uhat, u, ueff: uhat / Math.SQRT2 };
+}
+
+// =====================================================================
+//  UI-Funktionen
+// =====================================================================
+function toggleTheme() {
+  const body = document.body;
+  const next = body.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+  body.setAttribute('data-theme', next);
+  loadPalette();
+  if (window.view3d) window.view3d.setTheme();
+}
+
+function toggleRun() {
+  running = !running;
+  const btn = document.getElementById('btn-run');
+  btn.innerText = running ? '❚❚ Pause' : '▶ Start';
+  btn.classList.toggle('btn-active', running);
+}
+
+function resetTime() {
+  phase = 0; simT = 0; samples = [];
+}
+
+function toggleAdvanced() {
+  isAdvanced = !isAdvanced;
+  const btn = document.getElementById('btn-adv');
+  btn.innerText = `Advanced: ${isAdvanced ? 'Ein' : 'Aus'}`;
+  btn.classList.toggle('btn-active', isAdvanced);
+  document.body.classList.toggle('advanced', isAdvanced);
+  if (!isAdvanced) { values.N = 1; values.l = 0.2; syncParamUI(); }
+  updateSimulation();
+}
+
+function fmtParam(key, val) {
+  return Number(val).toFixed(PARAMS[key].digits);
+}
+
+function buildParamUI() {
+  const grid = document.getElementById('param-grid');
+  grid.innerHTML = Object.keys(PARAMS).map(k => {
+    const p = PARAMS[k];
+    return `<div class="param param-${k} ${p.adv ? 'adv' : ''}">
+      <div class="param-head">
+        <span class="param-name">${p.sym} <small>${p.name}</small></span>
+        <span class="param-val"><input type="number" id="num-${k}" min="${p.min}" max="${p.max}" step="${p.step}" value="${values[k]}" oninput="setParam('${k}', this.value, 'num')"> ${p.unit}</span>
+      </div>
+      <input type="range" id="rng-${k}" min="${p.min}" max="${p.max}" step="${p.step}" value="${values[k]}" oninput="setParam('${k}', this.value, 'rng')">
+    </div>`;
+  }).join('');
+}
+
+function syncParamUI(except) {
+  for (const k in PARAMS) {
+    if (except !== 'num-' + k) document.getElementById('num-' + k).value = values[k];
+    if (except !== 'rng-' + k) document.getElementById('rng-' + k).value = values[k];
+  }
+}
+
+function clampParam(key, val) {
+  const p = PARAMS[key];
+  if (!Number.isFinite(val)) val = p.min;
+  val = Math.min(p.max, Math.max(p.min, val));
+  if (key === 'N') val = Math.round(val);
+  return val;
+}
+
+function setParam(key, raw, src) {
+  const val = clampParam(key, parseFloat(raw));
+  values[key] = val;
+  syncParamUI(src + '-' + key);
+  if (src === 'num' && parseFloat(raw) !== val && raw !== '') document.getElementById('num-' + key).value = val;
+  updateSimulation();
+}
+
+function openEditModal(key) {
+  activeEditKey = key;
+  const p = PARAMS[key];
+  document.getElementById('modal-title').innerHTML = `${p.sym} – ${p.name}${p.unit ? ' (' + p.unit + ')' : ''}`;
+  const valInput = document.getElementById('modal-input');
+  const valSlider = document.getElementById('modal-slider');
+  for (const el of [valInput, valSlider]) { el.min = p.min; el.max = p.max; el.step = p.step; el.value = values[key]; }
+  document.getElementById('edit-modal').style.display = 'flex';
+}
+
+function syncModalSlider() {
+  const val = clampParam(activeEditKey, parseFloat(document.getElementById('modal-slider').value));
+  document.getElementById('modal-input').value = val;
+  values[activeEditKey] = val;
+  syncParamUI();
+  updateSimulation();
+}
+
+function syncModalInput() {
+  const input = document.getElementById('modal-input');
+  const val = clampParam(activeEditKey, parseFloat(input.value));
+  document.getElementById('modal-slider').value = val;
+  values[activeEditKey] = val;
+  syncParamUI();
+  updateSimulation();
+}
+
+function closeModal() {
+  document.getElementById('edit-modal').style.display = 'none';
+}
+document.getElementById('edit-modal').addEventListener('click', e => { if (e.target.id === 'edit-modal') closeModal(); });
+
+function updateSimulation() {
+  calculateAndDisplay();
+}
+
+// =====================================================================
+//  Farben (aus den CSS-Variablen, damit Dark/Light wirkt)
+// =====================================================================
+let PAL = {};
+function loadPalette() {
+  const cs = getComputedStyle(document.body);
+  const g = n => cs.getPropertyValue(n).trim();
+  PAL = {
+    bg: g('--bg'), panel: g('--panel-bg'), text: g('--text'), bold: g('--text-bold'), border: g('--border'),
+    volt: g('--volt-color'), field: g('--field-color'), vel: g('--vel-color'), red: g('--point-color'),
+    poleS: g('--pole-s'), copper: g('--copper'), meter: g('--meter-body'), primary: g('--primary'),
+    dark: document.body.getAttribute('data-theme') !== 'light'
+  };
+}
+
+function hexToRgb(h) {
+  h = h.replace('#', '');
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  const n = parseInt(h, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function rgba(hex, a = 1, k = 1) {
+  const [r, g, b] = hexToRgb(hex);
+  const c = x => Math.max(0, Math.min(255, Math.round(x * k)));
+  return `rgba(${c(r)},${c(g)},${c(b)},${a})`;
+}
+
+// =====================================================================
+//  Geometrie (wird vom 3D-Modul verwendet)
+// =====================================================================
+const GEO = {
+  G: 0.5,       // Luftspalt (Höhe)
+  H: 0.13,      // Polschuh-Dicke
+  D: 0.52,      // Tiefe der Pole (Bewegungsrichtung z)
+  TY: 0.13,     // Joch-Dicke
+  STROKE: 0.17, // Hub (Amplitude der Leiterbewegung, schematisch)
+  rodR: 0.03
+};
+
+function magnetWidth() {
+  // Breite der Pole = wirksame Leiterlänge (schematisch skaliert)
+  return 0.26 + 0.74 * (values.l - 0.05) / 0.95;
+}
+
+function formatVolt(u, uhat) {
+  if (uhat < 1) return `${(u * 1000).toFixed(1)} mV`;
+  return `${u.toFixed(3)} V`;
+}
+
+function resetView() {
+  if (window.view3d) window.view3d.resetView();
+}
+
+function showSceneError(msg) {
+  const box = document.getElementById('scene-error');
+  box.innerHTML = `<b>Die 3D-Ansicht konnte nicht geladen werden.</b><br>${msg}<br><span style="opacity:0.8">Plot und Gleichungen funktionieren weiterhin.</span>`;
+  box.hidden = false;
+}
+function hideSceneError() { document.getElementById('scene-error').hidden = true; }
+setTimeout(() => {
+  if (!window.view3d && document.getElementById('scene-error').hidden) showSceneError('Three.js wurde nicht geladen (Ordner lib/ fehlt, Seite über file:// geöffnet oder WebGL nicht verfügbar).');
+}, 9000);
+
+// =====================================================================
+//  Plot u_i(t)
+// =====================================================================
+function niceCeil(x) {
+  if (!(x > 0)) return 1;
+  const e = Math.pow(10, Math.floor(Math.log10(x)));
+  const m = x / e;
+  return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * e;
+}
+function niceStep(x) {
+  const e = Math.pow(10, Math.floor(Math.log10(x)));
+  const m = x / e;
+  return (m < 1.5 ? 1 : m < 3 ? 2 : m < 7 ? 5 : 10) * e;
+}
+function trimNum(x, d) { return Number(x.toFixed(d)).toString(); }
+
+function renderPlot() {
+  const canvas = document.getElementById('plot');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+    canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  const ph = physics(phase);
+  const mL = 62, mR = 60, mT = 22, mB = 34;
+  const pw = w - mL - mR, phh = h - mT - mB;
+
+  const win = 2 * values.T;
+  const tEnd = Math.max(simT, win), tStart = tEnd - win;
+
+  const useMilli = ph.uhat < 1;
+  const uf = useMilli ? 1000 : 1;
+  const uUnit = useMilli ? 'mV' : 'V';
+  const uMax = niceCeil(Math.max(ph.uhat * uf, useMilli ? 1e-3 : 0) * 1.12) || 1;
+  const vMax = niceCeil(values.v * 1.12) || 1;
+
+  const X = t => mL + (t - tStart) / win * pw;
+  const Yu = u => mT + phh / 2 - (u * uf) / uMax * (phh / 2);
+  const Yv = v => mT + phh / 2 - v / vMax * (phh / 2);
+
+  ctx.font = '11px -apple-system, Segoe UI, Arial, sans-serif';
+  ctx.lineWidth = 1;
+
+  // Raster
+  const yTicks = 4;
+  for (let i = -yTicks; i <= yTicks; i++) {
+    const y = mT + phh / 2 - i / yTicks * (phh / 2);
+    ctx.strokeStyle = rgba(PAL.border, i === 0 ? 0.9 : 0.28);
+    ctx.lineWidth = i === 0 ? 1.4 : 1;
+    ctx.beginPath(); ctx.moveTo(mL, y); ctx.lineTo(mL + pw, y); ctx.stroke();
+    ctx.fillStyle = PAL.volt; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.fillText(trimNum(uMax * i / yTicks, 3), mL - 6, y);
+    ctx.fillStyle = PAL.vel; ctx.textAlign = 'left';
+    ctx.fillText(trimNum(vMax * i / yTicks, 2), mL + pw + 6, y);
+  }
+  const xs = niceStep(win / 7);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let t = Math.ceil(tStart / xs) * xs; t <= tEnd + 1e-9; t += xs) {
+    const x = X(t);
+    ctx.strokeStyle = rgba(PAL.border, 0.28); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, mT); ctx.lineTo(x, mT + phh); ctx.stroke();
+    ctx.fillStyle = PAL.text;
+    ctx.fillText(trimNum(t, 2), x, mT + phh + 5);
+  }
+  ctx.strokeStyle = PAL.border; ctx.lineWidth = 1.2;
+  ctx.strokeRect(mL, mT, pw, phh);
+
+  // Achsenbeschriftungen
+  ctx.font = 'bold 11px -apple-system, Segoe UI, Arial, sans-serif';
+  ctx.fillStyle = PAL.text; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+  ctx.fillText('t in s', mL + pw, mT + phh + 19);
+  ctx.save();
+  ctx.translate(14, mT + phh / 2); ctx.rotate(-Math.PI / 2);
+  ctx.fillStyle = PAL.volt; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(`u_i in ${uUnit}`, 0, 0);
+  ctx.restore();
+  ctx.save();
+  ctx.translate(w - 12, mT + phh / 2); ctx.rotate(Math.PI / 2);
+  ctx.fillStyle = PAL.vel; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('v in m/s', 0, 0);
+  ctx.restore();
+
+  // Hüllkurve ±û
+  if (ph.uhat > 0) {
+    ctx.setLineDash([3, 4]); ctx.strokeStyle = rgba(PAL.volt, 0.55); ctx.lineWidth = 1;
+    for (const s of [1, -1]) { const y = Yu(s * ph.uhat); ctx.beginPath(); ctx.moveTo(mL, y); ctx.lineTo(mL + pw, y); ctx.stroke(); }
+    ctx.setLineDash([]);
+    ctx.fillStyle = PAL.volt; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    ctx.font = 'bold 11px -apple-system, Segoe UI, Arial, sans-serif';
+    ctx.fillText(`û = ${trimNum(ph.uhat * uf, 3)} ${uUnit}`, mL + 6, Yu(ph.uhat) - 2);
+  }
+
+  // Kurven
+  ctx.save();
+  ctx.beginPath(); ctx.rect(mL, mT - 2, pw, phh + 4); ctx.clip();
+  const vis = samples.filter(s => s.t >= tStart - 0.05);
+  const curve = (key, Y, color, width, dash) => {
+    if (vis.length < 2) return;
+    ctx.strokeStyle = color; ctx.lineWidth = width; ctx.setLineDash(dash || []);
+    ctx.beginPath();
+    vis.forEach((s, i) => { const x = X(s.t), y = Y(s[key]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.stroke(); ctx.setLineDash([]);
+  };
+  curve('v', Yv, rgba(PAL.vel, 0.8), 1.5, [6, 4]);
+  curve('u', Yu, PAL.volt, 2.6);
+  ctx.restore();
+
+  // aktueller Punkt
+  const xNow = X(simT);
+  ctx.strokeStyle = rgba(PAL.text, 0.5); ctx.setLineDash([2, 3]); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(xNow, mT); ctx.lineTo(xNow, mT + phh); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = PAL.vel;
+  ctx.beginPath(); ctx.arc(xNow, Yv(ph.vt), 3.5, 0, 2 * Math.PI); ctx.fill();
+  ctx.fillStyle = PAL.volt; ctx.strokeStyle = PAL.bg; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(xNow, Yu(ph.u), 5.5, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+
+  // Legende
+  ctx.font = 'bold 11px -apple-system, Segoe UI, Arial, sans-serif';
+  ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  let lx = mL + 4; const ly = 10;
+  ctx.strokeStyle = PAL.volt; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx + 18, ly); ctx.stroke();
+  ctx.fillStyle = PAL.volt; ctx.fillText('u_i(t) = û · sin(ωt)', lx + 24, ly);
+  lx += 24 + ctx.measureText('u_i(t) = û · sin(ωt)').width + 18;
+  ctx.strokeStyle = PAL.vel; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]); ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx + 18, ly); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = PAL.vel; ctx.fillText('v(t) = v̂ · sin(ωt)', lx + 24, ly);
+}
+
+// =====================================================================
+//  Gleichungen
+// =====================================================================
+const S = (b, s) => `${b}<sub>${s}</sub>`;
+const frac = (n, d) => `<span class="frac"><span>${n}</span><span>${d}</span></span>`;
+const line = (html, cls = '') => `<div class="eq-line ${cls}">${html}</div>`;
+const fx = (x, d) => Number.isFinite(x) ? x.toFixed(d) : '—';
+const fVolt = x => Math.abs(x) < 1 && x !== 0 ? `${fx(x, 4)} V <span style="font-weight:normal; opacity:0.75;">(${fx(x * 1000, 1)} mV)</span>` : `${fx(x, 3)} V`;
+
+function calculateAndDisplay() {
+  const { B, v, T, N, l } = values;
+  const ph = physics(phase);
+  const out = document.getElementById('equation-display');
+  const Ui = S('U', 'i'), ui = S('u', 'i');
+
+  const law = `<div class="eq-block eq-block-volt">
+    <div class="eq-title eq-title-volt">Induktionsgesetz – bewegter Leiter</div>
+    <div class="eq-rule">${Ui} = N · <span class="fB">B</span> · ℓ · <span class="fv">v</span></div>
+    <div class="eq-step">
+      ${line(`${ui}(t) = N · B · ℓ · v(t)`)}
+      ${line(`${ui}(t) = ${N} · ${fx(B, 2)} T · ${fx(l, 2)} m · <span class="live-num" id="eq-vt">0.00</span> m/s`, 'eq-sub')}
+      ${line(`<span class="eq-res-volt">${ui}(t) = <span class="live-num" id="eq-ut">0.000</span> V</span>`)}
+      <div class="eq-note">Momentanwert bei t = <span id="eq-t">0.00</span> s</div>
+    </div>
+    <div class="eq-step">
+      ${line(`û = N · B · ℓ · v̂`)}
+      ${line(`û = ${N} · ${fx(B, 2)} T · ${fx(l, 2)} m · ${fx(v, 1)} m/s`, 'eq-sub')}
+      ${line(`<span class="eq-res-volt">û = ${fVolt(ph.uhat)}</span>`)}
+    </div>
+  </div>`;
+
+  const sine = `<div class="eq-block eq-block-vel">
+    <div class="eq-title eq-title-vel">Sinusförmige Hin- und Herbewegung</div>
+    <div class="eq-rule">v(t) = v̂ · sin(ω · t)</div>
+    <div class="eq-step">
+      ${line(`ω = ${frac('2π', 'T')} = ${frac('2π', fx(T, 1) + ' s')} = <span class="eq-res-vel">${fx(ph.omega, 3)} 1/s</span>`)}
+      ${line(`f = ${frac('1', 'T')} = ${frac('1', fx(T, 1) + ' s')} = <span class="eq-res-vel">${fx(ph.f, 3)} Hz</span>`)}
+    </div>
+    <div class="eq-step">
+      ${line(`Da ${ui} ~ v gilt:`)}
+      ${line(`<span class="eq-res-volt">${ui}(t) = û · sin(ω · t)</span>`)}
+      ${line(`${S('U', 'eff')} = ${frac('û', '√2')} = ${frac(fx(ph.uhat, 4) + ' V', '√2')} = <span class="eq-res-volt">${fVolt(ph.ueff)}</span>`, 'eq-sub')}
+      <div class="eq-note">Der Leiter ist an den Umkehrpunkten kurz in Ruhe (v = 0 → ${ui} = 0). In der Mitte ist er am schnellsten (v = v̂ → ${ui} = û).</div>
+    </div>
+  </div>`;
+
+  const forms = `<div class="eq-block eq-block-result eq-wide">
+    <div class="eq-title eq-title-result">Umgestellte Formeln (Probe mit û = ${fVolt(ph.uhat)})</div>
+    <div class="formula-table">
+      <div>N = ${frac(Ui, 'B · ℓ · v')} = <span class="eq-res">${v * B * l > 0 ? fx(ph.uhat / (B * l * v), 0) : '—'}</span></div>
+      <div><span class="fB">B</span> = ${frac(Ui, 'N · ℓ · v')} = <span class="eq-res">${N * l * v > 0 ? fx(ph.uhat / (N * l * v), 2) + ' T' : '—'}</span></div>
+      <div>ℓ = ${frac(Ui, 'N · B · v')} = <span class="eq-res">${N * B * v > 0 ? fx(ph.uhat / (N * B * v), 2) + ' m' : '—'}</span></div>
+      <div><span class="fv">v</span> = ${frac(Ui, 'B · N · ℓ')} = <span class="eq-res">${N * B * l > 0 ? fx(ph.uhat / (N * B * l), 1) + ' m/s' : '—'}</span></div>
+    </div>
+    <div class="eq-note">Einheit: 1 T = 1 Vs/m² → T · m · m/s = Vs/m² · m · m/s = V</div>
+  </div>`;
+
+  const info = `<div class="eq-block eq-block-info eq-wide">
+    <div class="eq-info"><b>Rechte-Hand-Regel (Generatorprinzip):</b> Daumen = Bewegungsrichtung <span class="fv">v</span>, Zeigefinger = Feldrichtung <span class="fB">B</span> (N → S), Mittelfinger = technische Stromrichtung im Leiter.</div>
+    <div class="eq-info"><b>Ladungsverschiebung:</b> Die Lorentzkraft schiebt die Elektronen ⊖ an ein Leiterende. Dieses Ende wird zum Minuspol. Kehrt die Bewegung um, wechselt auch die Polarität. Ein Vorzeichenwechsel von ${ui} heisst: Die Spannung wirkt gegen den eingezeichneten Spannungspfeil.</div>
+    <div class="eq-info"><b>Induktion</b> bedeutet auf lat. inductio = Hineinführen.</div>
+    <div class="achtung">⚠ <u>ACHTUNG:</u> Befindet sich eine Leiterschleife im Magnetfeld, muss die Formel um den Faktor 2 erweitert werden (Hin- und Rückleiter)!</div>
+    <div class="eq-note">Darstellung schematisch: Der Hub des Leiters ist nicht massstäblich. B, v̂, ℓ und N bestimmen nur die Spannung.</div>
+  </div>`;
+
+  out.innerHTML = law + sine + forms + info;
+  updateLive();
+}
+
+function updateLive() {
+  const ph = physics(phase);
+  const set = (id, s) => { const el = document.getElementById(id); if (el) el.innerHTML = s; };
+  set('eq-vt', fx(ph.vt, 2));
+  set('eq-ut', fx(ph.u, 4));
+  set('eq-t', fx(simT, 2));
+  set('live-u', `u<sub>i</sub> = ${ph.uhat < 1 ? fx(ph.u * 1000, 1).padStart(6, ' ') + ' mV' : fx(ph.u, 3).padStart(7, ' ') + ' V'}`);
+  set('live-v', `<b>v</b> = ${fx(ph.vt, 2)} m/s`);
+  set('live-t', `t = ${fx(simT, 2)} s`);
+}
+
+// =====================================================================
+//  Animationsschleife
+// =====================================================================
+let liveTimer = 0;
+function frame(ts) {
+  if (lastFrame === null) lastFrame = ts;
+  const dt = Math.min(0.05, (ts - lastFrame) / 1000);
+  lastFrame = ts;
+  if (running) {
+    phase += 2 * Math.PI / values.T * dt;
+    simT += dt;
+    const ph = physics(phase);
+    samples.push({ t: simT, u: ph.u, v: ph.vt });
+    const keep = simT - 2 * PARAMS.T.max - 1;
+    while (samples.length && samples[0].t < keep) samples.shift();
+  }
+  if (window.view3d) {
+    try { window.view3d.render(phase); }
+    catch (err) { window.view3d = null; showSceneError('Fehler beim Zeichnen: ' + err.message); }
+  }
+  renderPlot();
+  liveTimer += dt;
+  if (liveTimer > 0.06 || !running) { updateLive(); liveTimer = 0; }
+  requestAnimationFrame(frame);
+}
+
+// Start
+loadPalette();
+buildParamUI();
+updateSimulation();
+samples.push({ t: 0, u: 0, v: 0 });
+requestAnimationFrame(frame);
+</script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./lib/three.module.min.js",
+    "three/addons/": "./lib/addons/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+// =====================================================================
+//  3D-Szene mit Three.js (WebGL)
+//  Koordinaten: x = entlang des Leiters, y = nach oben (Feldrichtung N → S), z = Bewegungsrichtung (zum Betrachter)
+// =====================================================================
+try {
+  initScene();
+} catch (err) {
+  showSceneError(err && err.message ? err.message : String(err));
+}
+
+function initScene() {
+  const host = document.getElementById('scene3d');
+  const { G, H, D, TY, STROKE, rodR } = GEO;
+  const y0 = -G / 2 - H;                   // Bodenhöhe
+  const CAM_DEFAULT = { yaw: 0.58, pitch: 0.36, dist: 2.55 };
+  const TARGET = new THREE.Vector3(0, -0.06, 0.2);
+
+  // ---------- Renderer ----------
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  host.appendChild(renderer.domElement);
+
+  const labelRenderer = new CSS2DRenderer();
+  labelRenderer.domElement.className = 'label-layer';
+  host.appendChild(labelRenderer.domElement);
+
+  const scene = new THREE.Scene();
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+  const camera = new THREE.PerspectiveCamera(32, 1, 0.05, 50);
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.minDistance = 1.3;
+  controls.maxDistance = 6;
+  controls.maxPolarAngle = 1.5;
+  controls.target.copy(TARGET);
+
+  function resetView() {
+    const { yaw, pitch, dist } = CAM_DEFAULT;
+    controls.target.copy(TARGET);
+    camera.position.set(
+      TARGET.x + Math.sin(yaw) * Math.cos(pitch) * dist,
+      TARGET.y + Math.sin(pitch) * dist,
+      TARGET.z + Math.cos(yaw) * Math.cos(pitch) * dist
+    );
+    controls.update();
+  }
+  resetView();
+
+  // ---------- Licht ----------
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x3a4a55, 0.9);
+  const sun = new THREE.DirectionalLight(0xffffff, 2.1);
+  sun.position.set(-1.3, 2.8, 1.7);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  Object.assign(sun.shadow.camera, { left: -1.6, right: 1.6, top: 1.6, bottom: -1.6, near: 0.5, far: 8 });
+  sun.shadow.camera.updateProjectionMatrix();
+  sun.shadow.bias = -0.0004;
+  sun.shadow.normalBias = 0.02;
+  const fill = new THREE.DirectionalLight(0xffffff, 0.5);
+  fill.position.set(1.8, 1.0, 2.2);
+  scene.add(hemi, sun, fill);
+
+  // ---------- Boden ----------
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.ShadowMaterial({ opacity: 0.3 }));
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = y0;
+  floor.receiveShadow = true;
+  scene.add(floor);
+  let grid = null;
+
+  // ---------- Materialien ----------
+  const std = (hex, o = {}) => new THREE.MeshStandardMaterial({
+    color: new THREE.Color(hex), roughness: o.r ?? 0.55, metalness: o.m ?? 0.05, envMapIntensity: o.env ?? 0.55
+  });
+  const M = {
+    red: std('#dc322f'),
+    green: std('#859900'),
+    copper: std('#c8783a', { r: 0.3, m: 0.85, env: 1.1 }),
+    meter: std('#4f6973', { r: 0.62 }),
+    socketRed: std('#dc322f', { r: 0.35 }),
+    socketBlack: std('#1b1b1b', { r: 0.35 }),
+    leadRed: std('#dc322f', { r: 0.45 }),
+    leadCom: std('#2a3a40', { r: 0.45 }),
+    field: new THREE.MeshBasicMaterial({ color: new THREE.Color('#6c71c4'), transparent: true, opacity: 0.6, depthWrite: false }),
+    vel: new THREE.MeshStandardMaterial({ color: new THREE.Color('#d33682'), roughness: 0.4, emissive: new THREE.Color('#d33682'), emissiveIntensity: 0.35 }),
+    volt: new THREE.MeshStandardMaterial({ color: new THREE.Color('#268bd2'), roughness: 0.4, emissive: new THREE.Color('#268bd2'), emissiveIntensity: 0.35 }),
+    dim: new THREE.MeshBasicMaterial({ color: new THREE.Color('#93a1a1') })
+  };
+
+  // ---------- Hilfsfunktionen ----------
+  const rbox = (w, h, d, mat, r = 0.012) => {
+    const m = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 3, Math.min(r, w / 2, h / 2, d / 2)), mat);
+    m.castShadow = true; m.receiveShadow = true;
+    return m;
+  };
+
+  function label(html, cls) {
+    const el = document.createElement('div');
+    el.className = 'lbl ' + cls;
+    el.innerHTML = html;
+    return new CSS2DObject(el);
+  }
+
+  function canvasTexture(w, h, draw) {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    draw(ctx, w, h);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    return { tex, ctx, canvas: c };
+  }
+
+  // Pfeil aus Zylinder + Kegel; setArrow() richtet ihn von a nach b aus
+  const UP = new THREE.Vector3(0, 1, 0);
+  function makeArrow(mat, shaftR, headR, headL) {
+    const g = new THREE.Group();
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(shaftR, shaftR, 1, 12), mat);
+    const head = new THREE.Mesh(new THREE.ConeGeometry(headR, headL, 18), mat);
+    shaft.castShadow = head.castShadow = true;
+    g.add(shaft, head);
+    g.userData = { shaft, head, headL };
+    return g;
+  }
+  function setArrow(g, a, b) {
+    const dir = new THREE.Vector3().subVectors(b, a);
+    const len = dir.length();
+    if (len < 1e-6) { g.visible = false; return; }
+    g.visible = true;
+    dir.normalize();
+    const { shaft, head, headL } = g.userData;
+    const hl = Math.min(headL, len * 0.6);
+    const sl = Math.max(1e-4, len - hl);
+    g.position.copy(a);
+    g.quaternion.setFromUnitVectors(UP, dir);
+    shaft.scale.set(1, sl, 1);
+    shaft.position.set(0, sl / 2, 0);
+    head.scale.set(1, hl / headL, 1);
+    head.position.set(0, sl + hl / 2, 0);
+  }
+
+  function letterMesh(ch, size) {
+    const { tex } = canvasTexture(128, 128, (ctx, w, h) => {
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = 'rgba(255,255,255,0.94)';
+      ctx.font = 'bold 104px -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(ch, w / 2, h / 2 + 6);
+    });
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+    return m;
+  }
+
+  function disposeTree(obj) {
+    obj.traverse(o => {
+      if (o.isCSS2DObject && o.element) o.element.remove();
+      if (o.geometry) o.geometry.dispose();
+      if (o.material && o.material.map && o.userData.ownMap) { o.material.map.dispose(); o.material.dispose(); }
+    });
+  }
+
+  // =====================================================================
+  //  Aufbau (wird neu erstellt, wenn sich ℓ und damit die Polbreite ändert)
+  // =====================================================================
+  const clickables = [];
+  let built = null;
+
+  function build(W) {
+    if (built) { scene.remove(built.root); disposeTree(built.root); }
+    clickables.length = 0;
+    const root = new THREE.Group();
+    scene.add(root);
+    const ext = 0.26;
+    const xL = -W / 2 - ext, xR = W / 2 + ext;
+
+    // --- Magnet: Nordpol unten (rot), Südpol oben (grün), Joch hinten ---
+    const magnet = new THREE.Group();
+    const poleN = rbox(W, H, D, M.red); poleN.position.set(0, y0 + H / 2, 0);
+    const poleS = rbox(W, H, D, M.green); poleS.position.set(0, G / 2 + H / 2, 0);
+    const yokeH = G / 2 + H;
+    const yokeN = rbox(W, yokeH, TY, M.red); yokeN.position.set(0, y0 + yokeH / 2, -D / 2 - TY / 2 + 0.001);
+    const yokeS = rbox(W, yokeH, TY, M.green); yokeS.position.set(0, yokeH / 2, -D / 2 - TY / 2 + 0.001);
+    magnet.add(poleN, poleS, yokeN, yokeS);
+    [poleN, poleS, yokeN, yokeS].forEach(m => { m.userData.key = 'B'; clickables.push(m); });
+
+    // Polbeschriftungen (vorne und auf beiden Seiten)
+    const ls = Math.min(H * 0.82, 0.11);
+    for (const [ch, y] of [['N', y0 + H / 2], ['S', G / 2 + H / 2]]) {
+      const f = letterMesh(ch, ls); f.position.set(0, y, D / 2 + 0.0015); magnet.add(f);
+      const r = letterMesh(ch, ls); r.position.set(W / 2 + 0.0015, y, 0); r.rotation.y = Math.PI / 2; magnet.add(r);
+      const l = letterMesh(ch, ls); l.position.set(-W / 2 - 0.0015, y, 0); l.rotation.y = -Math.PI / 2; magnet.add(l);
+      [f, r, l].forEach(m => { m.userData.ownMap = true; });
+    }
+    root.add(magnet);
+
+    // --- Feldlinien ---
+    const field = new THREE.Group();
+    const nx = Math.max(3, Math.round(W / 0.11)), nz = 4;
+    const lineGeo = new THREE.CylinderGeometry(0.0032, 0.0032, G - 0.006, 6);
+    const headGeo = new THREE.ConeGeometry(0.014, 0.042, 14);
+    for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
+      const x = -W / 2 + W * (i + 0.5) / nx;
+      const z = -D / 2 + D * (j + 0.5) / nz;
+      const ln = new THREE.Mesh(lineGeo, M.field); ln.position.set(x, 0, z);
+      const hd = new THREE.Mesh(headGeo, M.field); hd.position.set(x, 0.135, z);
+      field.add(ln, hd);
+    }
+    const lblB = label('B', 'lbl-B');
+    lblB.position.set(-W / 2 + 0.035, G / 2 - 0.04, D / 2 + 0.03);
+    field.add(lblB);
+    root.add(field);
+
+    // --- Massband ℓ ---
+    const yd = G / 2 + H + 0.06, zd = D / 2;
+    const dimLine = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, W - 0.05, 8), M.dim);
+    dimLine.rotation.z = Math.PI / 2; dimLine.position.set(0, yd, zd);
+    const coneGeo = new THREE.ConeGeometry(0.012, 0.03, 12);
+    const cL = new THREE.Mesh(coneGeo, M.dim); cL.rotation.z = Math.PI / 2; cL.position.set(-W / 2 + 0.015, yd, zd);
+    const cR = new THREE.Mesh(coneGeo, M.dim); cR.rotation.z = -Math.PI / 2; cR.position.set(W / 2 - 0.015, yd, zd);
+    const tickGeo = new THREE.CylinderGeometry(0.0025, 0.0025, 0.07, 6);
+    const tL = new THREE.Mesh(tickGeo, M.dim); tL.position.set(-W / 2, yd - 0.01, zd);
+    const tR = new THREE.Mesh(tickGeo, M.dim); tR.position.set(W / 2, yd - 0.01, zd);
+    const lblL = label('', 'lbl-dim'); lblL.position.set(0, yd + 0.05, zd);
+    root.add(dimLine, cL, cR, tL, tR, lblL);
+
+    // --- Leiter (bewegt sich in z) ---
+    const rod = new THREE.Group();
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(rodR, rodR, xR - xL, 40), M.copper);
+    bar.rotation.z = Math.PI / 2;
+    bar.castShadow = true; bar.receiveShadow = true;
+    bar.userData.key = 'v';
+    clickables.push(bar);
+    rod.add(bar);
+    // Anschlussklemmen an den Enden
+    const clampGeo = new THREE.CylinderGeometry(rodR * 1.25, rodR * 1.25, 0.03, 24);
+    const clampL = new THREE.Mesh(clampGeo, M.leadRed); clampL.rotation.z = Math.PI / 2; clampL.position.set(xL + 0.03, 0, 0);
+    const clampR = new THREE.Mesh(clampGeo, M.leadCom); clampR.rotation.z = Math.PI / 2; clampR.position.set(xR - 0.03, 0, 0);
+    clampL.castShadow = clampR.castShadow = true;
+    rod.add(clampL, clampR);
+
+    // Spannungspfeil U_i (Bezugsrichtung linkes Ende → rechtes Ende)
+    const uArrow = makeArrow(M.volt, 0.0045, 0.014, 0.04);
+    const yA = -rodR - 0.06;
+    setArrow(uArrow, new THREE.Vector3(xL + 0.02, yA, 0), new THREE.Vector3(xL + ext * 0.92, yA, 0));
+    rod.add(uArrow);
+    const lblU = label('U<sub>i</sub>', 'lbl-U'); lblU.position.set(xL + ext * 0.46, yA - 0.06, 0); rod.add(lblU);
+
+    // Geschwindigkeitspfeil v
+    const vArrow = makeArrow(M.vel, 0.009, 0.026, 0.07);
+    rod.add(vArrow);
+    const lblV = label('v', 'lbl-v'); rod.add(lblV);
+
+    // Polarität an den Enden
+    const lblPL = label('', 'lbl-pol'); lblPL.position.set(xL - 0.06, 0.0, 0); rod.add(lblPL);
+    const lblPR = label('', 'lbl-pol'); lblPR.position.set(xR + 0.06, 0.0, 0); rod.add(lblPR);
+    root.add(rod);
+
+    built = { root, rod, field, lblB, xL, xR, ext, W, vArrow, lblV, lblPL, lblPR, lblL };
+  }
+
+  // ---------- Elektronen (Sprites) ----------
+  const eTex = canvasTexture(64, 64, (ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    ctx.beginPath(); ctx.arc(32, 32, 27, 0, 2 * Math.PI);
+    ctx.fillStyle = '#fdf6e3'; ctx.fill();
+    ctx.lineWidth = 5; ctx.strokeStyle = '#268bd2'; ctx.stroke();
+    ctx.fillStyle = '#268bd2'; ctx.fillRect(17, 29, 30, 6);
+  }).tex;
+  const eMat = new THREE.SpriteMaterial({ map: eTex, depthTest: true });
+  const electrons = [];
+  const NE = 7;
+  for (let i = 0; i < NE; i++) {
+    const s = new THREE.Sprite(eMat);
+    s.scale.set(rodR * 1.25, rodR * 1.25, 1);
+    s.renderOrder = 2;
+    scene.add(s);
+    electrons.push(s);
+  }
+
+  // ---------- Messgerät ----------
+  const mz = D / 2 + 0.46, mw = 0.5, mh = 0.075, md = 0.3;
+  const meter = new THREE.Group();
+  meter.position.set(0, y0, mz);
+  const body = rbox(mw, mh, md, M.meter, 0.018); body.position.y = mh / 2;
+  meter.add(body);
+
+  // Deckplatte mit Beschriftung (Textur oben = hinten)
+  const TW = 512, TH = Math.round(512 * md / mw);
+  const czy = z => (z + md / 2) / md * TH;   // z (lokal) → Canvas-y
+  const cx = x => (x / mw + 0.5) * TW;       // x (lokal) → Canvas-x
+  const tV = new THREE.Vector3(-0.1, 0, -0.095), tC = new THREE.Vector3(0.1, 0, -0.095);
+  const plate = canvasTexture(TW, TH, (ctx, w, h) => {
+    ctx.fillStyle = '#5c7781'; ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 4;
+    ctx.strokeRect(10, 10, w - 20, h - 20);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 30px -apple-system, "Segoe UI", Arial, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('V', cx(tV.x) - 62, czy(tV.z));
+    ctx.font = 'bold 24px -apple-system, "Segoe UI", Arial, sans-serif';
+    ctx.fillText('COM', cx(tC.x) + 70, czy(tC.z));
+    for (const [t, col] of [[tV, '#dc322f'], [tC, '#111']]) {
+      ctx.beginPath(); ctx.arc(cx(t.x), czy(t.z), 30, 0, 2 * Math.PI);
+      ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = col; ctx.stroke();
+    }
+  });
+  const plateMesh = new THREE.Mesh(new THREE.PlaneGeometry(mw - 0.02, md - 0.02),
+    new THREE.MeshStandardMaterial({ map: plate.tex, roughness: 0.6, metalness: 0.05, envMapIntensity: 0.55 }));
+  plateMesh.rotation.x = -Math.PI / 2;
+  plateMesh.position.y = mh + 0.0012;
+  plateMesh.receiveShadow = true;
+  meter.add(plateMesh);
+
+  // Anzeige (leuchtend, vorne)
+  const SW = 0.42, SH = 0.15;
+  const screen = canvasTexture(640, Math.round(640 * SH / SW), () => {});
+  const screenMesh = new THREE.Mesh(new THREE.PlaneGeometry(SW, SH), new THREE.MeshBasicMaterial({ map: screen.tex }));
+  screenMesh.rotation.x = -Math.PI / 2;
+  screenMesh.position.set(0, mh + 0.0022, 0.05);
+  meter.add(screenMesh);
+  let lastScreenText = null;
+  function drawScreen(txt) {
+    if (txt === lastScreenText) return;
+    lastScreenText = txt;
+    const { ctx, canvas } = screen;
+    const w = canvas.width, h = canvas.height;
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, '#03222b'); g.addColorStop(1, '#00121a');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = '#1d3b45'; ctx.lineWidth = 8; ctx.strokeRect(4, 4, w - 8, h - 8);
+    ctx.font = 'bold 22px -apple-system, "Segoe UI", Arial, sans-serif';
+    ctx.fillStyle = 'rgba(147,161,161,0.75)'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText('u', 22, 18);
+    ctx.font = 'bold 15px -apple-system, "Segoe UI", Arial, sans-serif';
+    ctx.fillText('i', 35, 30);
+    ctx.font = 'bold 110px "Courier New", Courier, monospace';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(95,179,240,0.6)'; ctx.shadowBlur = 14;
+    ctx.fillStyle = '#5fb3f0';
+    ctx.fillText(txt, w - 26, h / 2 + 6);
+    ctx.shadowBlur = 0;
+    screen.tex.needsUpdate = true;
+  }
+
+  // Buchsen
+  const sockGeo = new THREE.CylinderGeometry(0.019, 0.019, 0.022, 24);
+  const sockV = new THREE.Mesh(sockGeo, M.socketRed); sockV.position.set(tV.x, mh + 0.011, tV.z);
+  const sockC = new THREE.Mesh(sockGeo, M.socketBlack); sockC.position.set(tC.x, mh + 0.011, tC.z);
+  meter.add(sockV, sockC);
+  scene.add(meter);
+
+  // ---------- Messleitungen (Röhren entlang einer Bezierkurve) ----------
+  const leadR = new THREE.Mesh(new THREE.BufferGeometry(), M.leadRed);
+  const leadC = new THREE.Mesh(new THREE.BufferGeometry(), M.leadCom);
+  leadR.castShadow = leadC.castShadow = true;
+  scene.add(leadR, leadC);
+  const termWorld = t => new THREE.Vector3(t.x, y0 + mh + 0.02, mz + t.z);
+  function updateLead(mesh, p0, p3) {
+    const p1 = new THREE.Vector3(p0.x * 1.05, p0.y - 0.16, Math.max(p0.z, D / 2) + 0.1);
+    const p2 = new THREE.Vector3(p3.x * 1.6, p3.y + 0.2, p3.z - 0.14);
+    const curve = new THREE.CubicBezierCurve3(p0, p1, p2, p3);
+    mesh.geometry.dispose();
+    mesh.geometry = new THREE.TubeGeometry(curve, 48, 0.0068, 8, false);
+  }
+
+  // =====================================================================
+  //  Interaktion: Hover-Hervorhebung, Klick öffnet Eingabe
+  // =====================================================================
+  const raycaster = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+  let hoverKey = null, downPos = null;
+  function pick(ev) {
+    const r = renderer.domElement.getBoundingClientRect();
+    ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+    raycaster.setFromCamera(ndc, camera);
+    const hit = raycaster.intersectObjects(clickables, false)[0];
+    return hit ? hit.object.userData.key : null;
+  }
+  function setHover(key) {
+    if (key === hoverKey) return;
+    hoverKey = key;
+    const on = (mat, yes) => { mat.emissive.copy(mat.color); mat.emissiveIntensity = yes ? 0.22 : 0; };
+    on(M.red, key === 'B'); on(M.green, key === 'B'); on(M.copper, key === 'v');
+    renderer.domElement.style.cursor = key ? 'pointer' : 'grab';
+  }
+  const el = renderer.domElement;
+  el.style.cursor = 'grab';
+  el.addEventListener('pointerdown', e => { downPos = { x: e.clientX, y: e.clientY }; el.style.cursor = 'grabbing'; });
+  el.addEventListener('pointermove', e => { if (!downPos) setHover(pick(e)); });
+  el.addEventListener('pointerup', e => {
+    if (downPos && Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) < 5) {
+      const key = pick(e);
+      if (key) openEditModal(key);
+    }
+    downPos = null;
+    el.style.cursor = hoverKey ? 'pointer' : 'grab';
+  });
+  el.addEventListener('pointerleave', () => { if (!downPos) setHover(null); });
+  el.addEventListener('dblclick', resetView);
+
+  // =====================================================================
+  //  Theme
+  // =====================================================================
+  function setTheme() {
+    const bg = new THREE.Color(PAL.bg);
+    scene.background = bg;
+    scene.fog = new THREE.Fog(bg, 3.6, 8);
+    if (grid) { scene.remove(grid); grid.geometry.dispose(); grid.material.dispose(); }
+    grid = new THREE.GridHelper(3.2, 32, new THREE.Color(PAL.border), new THREE.Color(PAL.border));
+    grid.position.y = y0 + 0.0005;
+    grid.material.transparent = true;
+    grid.material.opacity = PAL.dark ? 0.35 : 0.45;
+    grid.material.depthWrite = false;
+    scene.add(grid);
+    floor.material.opacity = PAL.dark ? 0.45 : 0.22;
+    M.leadCom.color.set(PAL.dark ? '#93a1a1' : '#073642');
+    M.dim.color.set(PAL.bold);
+    hemi.intensity = PAL.dark ? 0.75 : 1.0;
+  }
+  setTheme();
+
+  // =====================================================================
+  //  Bild für Bild
+  // =====================================================================
+  let lastW = 0, lastH = 0;
+  const tmp = new THREE.Vector3();
+
+  function render(ph) {
+    // Grösse
+    const w = host.clientWidth, h = host.clientHeight;
+    if (w !== lastW || h !== lastH) {
+      lastW = w; lastH = h;
+      renderer.setSize(w, h);
+      labelRenderer.setSize(w, h);
+      camera.aspect = w / Math.max(1, h);
+      camera.updateProjectionMatrix();
+    }
+
+    const W = magnetWidth();
+    if (!built || Math.abs(W - built.W) > 1e-9) build(W);
+    const b = built;
+    const p = physics(ph);
+    const zr = -STROKE * Math.cos(ph);
+    const vn = values.v > 0 ? p.vt / values.v : 0;
+    const un = p.uhat > 0 ? p.u / p.uhat : 0;
+
+    b.rod.position.z = zr;
+    b.lblL.element.textContent = `ℓ = ${values.l.toFixed(2)} m`;
+
+    // Feld
+    b.field.visible = values.B > 0;
+    b.lblB.visible = values.B > 0;
+    M.field.opacity = 0.25 + 0.6 * values.B / PARAMS.B.max;
+
+    // Geschwindigkeit
+    const xa = b.W / 2 + b.ext * 0.55, ya = rodR + 0.06;
+    if (Math.abs(vn) > 0.02) {
+      setArrow(b.vArrow, tmp.set(xa, ya, 0).clone(), new THREE.Vector3(xa, ya, 0.36 * vn));
+      b.lblV.visible = true;
+      b.lblV.position.set(xa + 0.06, ya + 0.04, 0.36 * vn + 0.03 * Math.sign(vn));
+    } else {
+      b.vArrow.visible = false;
+      b.lblV.visible = false;
+    }
+
+    // Polarität
+    const showPol = p.uhat > 0 && Math.abs(un) > 0.04;
+    const lp = p.u > 0 ? '+' : '−', rp = p.u > 0 ? '−' : '+';
+    setPol(b.lblPL, showPol ? lp : '');
+    setPol(b.lblPR, showPol ? rp : '');
+
+    // Elektronen: bei u > 0 zum rechten Ende (+x) verschoben, auf der Kamera zugewandten Seite des Stabs
+    const shift = Math.max(-1, Math.min(1, un)) * 0.34 * (p.uhat > 0 ? Math.min(1, p.uhat / 0.05 + 0.4) : 0);
+    const toCam = new THREE.Vector3(0, camera.position.y, camera.position.z - zr).normalize();
+    for (let i = 0; i < NE; i++) {
+      let x = -b.W / 2 + b.W * (i + 0.5) / NE;
+      x = shift >= 0 ? x + shift * (b.W / 2 - x) * 0.85 : x + shift * (x + b.W / 2) * 0.85;
+      electrons[i].position.set(x, toCam.y * rodR * 1.45, zr + toCam.z * rodR * 1.45);
+    }
+
+    // Messleitungen
+    updateLead(leadR, new THREE.Vector3(b.xL + 0.03, -rodR * 0.6, zr), termWorld(tV));
+    updateLead(leadC, new THREE.Vector3(b.xR - 0.03, -rodR * 0.6, zr), termWorld(tC));
+
+    drawScreen(formatVolt(p.u, p.uhat));
+
+    controls.update();
+    renderer.render(scene, camera);
+    labelRenderer.render(scene, camera);
+  }
+
+  function setPol(obj, s) {
+    if (obj.userData.s === s) return;
+    obj.userData.s = s;
+    obj.element.textContent = s;
+    obj.element.classList.toggle('pol-plus', s === '+');
+    obj.element.classList.toggle('pol-minus', s === '−');
+  }
+
+  window.view3d = { render, setTheme, resetView };
+  hideSceneError();
+}
+</script>
+</body>
+</html>
