@@ -184,6 +184,24 @@
     }
     .modal-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
 
+    .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+    .tab-btn {
+      padding: 6px 14px; border: 1px solid var(--border); background: var(--panel-bg);
+      color: var(--text-bold); border-radius: 4px; cursor: pointer; font-weight: bold;
+      transition: all 0.2s ease;
+    }
+    .tab-btn.active { background: var(--primary); color: #ffffff; border-color: var(--primary); }
+
+    /* Aktive Bewegungsrichtung bei der Rechteckspannung */
+    .eq-dir { opacity: 0.55; transition: opacity 0.2s, background 0.2s; }
+    .eq-dir.eq-active { opacity: 1; background: rgba(38,139,210,0.10); }
+    .dir-badge {
+      float: right; font-size: 0.72rem; padding: 1px 8px; border-radius: 10px;
+      border: 1px solid currentColor; visibility: hidden;
+    }
+    .eq-dir.eq-active .dir-badge { visibility: visible; }
+    .eq-big-res { font-size: 1.15rem; }
+
     /* ---- Ergänzungen für die Induktions-Simulation ---- */
     #scene3d { position: absolute; inset: 0; }
     #scene3d canvas { display: block; touch-action: none; }
@@ -336,6 +354,10 @@
 </header>
 
 <div class="main-layout">
+  <div class="tabs">
+    <button class="tab-btn active" id="btn-tab-sine" onclick="selectWaveform('sine')">1. Sinusspannung</button>
+    <button class="tab-btn" id="btn-tab-rect" onclick="selectWaveform('rect')">2. Rechteckspannung</button>
+  </div>
 
   <div class="circuit-card">
     <div class="circuit-view">
@@ -414,13 +436,33 @@ let lastFrame = null;
 // v(t)  = v̂ · sin(ω t)
 // u_i(t) = N · B · ℓ · v(t) = û · sin(ω t)
 // Lage des Leiters: z(t) = -ẑ · cos(ω t)  →  dz/dt ∝ sin(ω t) (gleiche Richtung wie v)
+// Kurvenform der Bewegung: 'sine' = Sinus, 'rect' = Rechteck (50 % Tastgrad)
+let waveform = 'sine';
+
+// Anteil der aktuellen Periode (0 … 1)
+function periodFraction(ph) {
+  const f = (ph / (2 * Math.PI)) % 1;
+  return f < 0 ? f + 1 : f;
+}
+
 function physics(ph) {
   const { B, v, T, N, l } = values;
   const omega = 2 * Math.PI / T;
-  const vt = v * Math.sin(ph);
+  // Sinus: v(t) = v̂ · sin(ωt).  Rechteck: v = +v̂ in der 1. Halbperiode, −v̂ in der 2. Halbperiode
+  const vt = waveform === 'rect' ? (periodFraction(ph) < 0.5 ? v : -v) : v * Math.sin(ph);
   const uhat = N * B * l * v;
   const u = N * B * l * vt;
-  return { omega, f: 1 / T, vt, uhat, u, ueff: uhat / Math.SQRT2 };
+  const ueff = waveform === 'rect' ? uhat : uhat / Math.SQRT2;
+  return { omega, f: 1 / T, vt, uhat, u, ueff };
+}
+
+// Lage des Leiters in z (schematisch, Hub ±GEO.STROKE)
+// Sinus: z = −ẑ · cos(ωt).  Rechteck: konstante Geschwindigkeit → Dreiecksbewegung hin und zurück
+function rodZ(ph) {
+  const S = GEO.STROKE;
+  if (waveform !== 'rect') return -S * Math.cos(ph);
+  const f = periodFraction(ph);
+  return f < 0.5 ? -S + 4 * S * f : 3 * S - 4 * S * f;
 }
 
 // =====================================================================
@@ -439,6 +481,14 @@ function toggleRun() {
   const btn = document.getElementById('btn-run');
   btn.innerText = running ? '❚❚ Pause' : '▶ Start';
   btn.classList.toggle('btn-active', running);
+}
+
+function selectWaveform(w) {
+  waveform = w;
+  document.getElementById('btn-tab-sine').classList.toggle('active', w === 'sine');
+  document.getElementById('btn-tab-rect').classList.toggle('active', w === 'rect');
+  resetTime();
+  updateSimulation();
 }
 
 function resetTime() {
@@ -720,10 +770,12 @@ function renderPlot() {
   ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
   let lx = mL + 4; const ly = 10;
   ctx.strokeStyle = PAL.volt; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx + 18, ly); ctx.stroke();
-  ctx.fillStyle = PAL.volt; ctx.fillText('u_i(t) = û · sin(ωt)', lx + 24, ly);
-  lx += 24 + ctx.measureText('u_i(t) = û · sin(ωt)').width + 18;
+  const legU = waveform === 'rect' ? 'u_i(t) = ±û (Rechteck)' : 'u_i(t) = û · sin(ωt)';
+  const legV = waveform === 'rect' ? 'v(t) = ±v̂' : 'v(t) = v̂ · sin(ωt)';
+  ctx.fillStyle = PAL.volt; ctx.fillText(legU, lx + 24, ly);
+  lx += 24 + ctx.measureText(legU).width + 18;
   ctx.strokeStyle = PAL.vel; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]); ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx + 18, ly); ctx.stroke(); ctx.setLineDash([]);
-  ctx.fillStyle = PAL.vel; ctx.fillText('v(t) = v̂ · sin(ωt)', lx + 24, ly);
+  ctx.fillStyle = PAL.vel; ctx.fillText(legV, lx + 24, ly);
 }
 
 // =====================================================================
@@ -751,6 +803,7 @@ function calculateAndDisplay() {
       <div class="eq-note">Momentanwert bei t = <span id="eq-t">0.00</span> s</div>
     </div>
     <div class="eq-step">
+      ${waveform === 'rect' ? '<div class="eq-note">Betrag der Rechteckspannung:</div>' : ''}
       ${line(`û = N · B · ℓ · v̂`)}
       ${line(`û = ${N} · ${fx(B, 2)} T · ${fx(l, 2)} m · ${fx(v, 1)} m/s`, 'eq-sub')}
       ${line(`<span class="eq-res-volt">û = ${fVolt(ph.uhat)}</span>`)}
@@ -791,7 +844,47 @@ function calculateAndDisplay() {
     <div class="eq-note">Darstellung schematisch: Der Hub des Leiters ist nicht massstäblich. B, v̂, ℓ und N bestimmen nur die Spannung.</div>
   </div>`;
 
-  out.innerHTML = law + sine + forms + info;
+  const sgn = x => (x >= 0 ? '+' : '−') + fx(Math.abs(x), 1);
+  const dirBlock = (id, title, sign) => {
+    const vv = sign * v, uu = sign * ph.uhat;
+    const uTxt = Math.abs(uu) < 1 && uu !== 0
+      ? `${sign > 0 ? '+' : '−'}${fx(Math.abs(uu), 4)} V <span style="font-weight:normal; opacity:0.75;">(${sign > 0 ? '+' : '−'}${fx(Math.abs(uu) * 1000, 1)} mV)</span>`
+      : `${sign > 0 ? '+' : '−'}${fx(Math.abs(uu), 3)} V`;
+    return `<div class="eq-block eq-block-volt eq-dir" id="${id}">
+      <div class="eq-title eq-title-volt">${title} <span class="dir-badge">● jetzt</span></div>
+      <div class="eq-rule"><span class="fv">v</span> = ${sign > 0 ? '+' : '−'}v̂ = <span class="fv">${sgn(vv)} m/s</span></div>
+      <div class="eq-step">
+        ${line(`${Ui} = N · B · ℓ · v`)}
+        ${line(`${Ui} = ${N} · ${fx(B, 2)} T · ${fx(l, 2)} m · (${sgn(vv)} m/s)`, 'eq-sub')}
+        ${line(`<span class="eq-res-volt eq-big-res">${Ui} = ${uTxt}</span>`)}
+      </div>
+      <div class="eq-note">${sign > 0
+        ? 'Leiter bewegt sich nach vorne (zum Betrachter). Linkes Ende = Pluspol.'
+        : 'Leiter bewegt sich nach hinten (zum Joch). Rechtes Ende = Pluspol.'}
+        Während der ganzen Halbperiode ist v konstant, also ist auch ${Ui} konstant.</div>
+    </div>`;
+  };
+
+  const rect = dirBlock('dir-pos', 'Hinbewegung (v &gt; 0)', 1)
+    + dirBlock('dir-neg', 'Rückbewegung (v &lt; 0)', -1)
+    + `<div class="eq-block eq-block-vel eq-wide">
+    <div class="eq-title eq-title-vel">Rechteckspannung – Tastgrad 50 %</div>
+    <div class="eq-step">
+      ${line(`${S('t', 'hin')} = ${S('t', 'rück')} = ${frac('T', '2')} = ${frac(fx(T, 1) + ' s', '2')} = <span class="eq-res-vel">${fx(T / 2, 2)} s</span>`)}
+      ${line(`f = ${frac('1', 'T')} = ${frac('1', fx(T, 1) + ' s')} = <span class="eq-res-vel">${fx(ph.f, 3)} Hz</span>`)}
+    </div>
+    <div class="eq-step">
+      ${line(`${ui}(t) = +û für 0 ≤ t &lt; T/2,   ${ui}(t) = −û für T/2 ≤ t &lt; T`)}
+      ${line(`Mittelwert über eine Periode: Ū = ${frac('(+û) · T/2 + (−û) · T/2', 'T')} = <span class="eq-res-volt">0 V</span>`, 'eq-sub')}
+      ${line(`Effektivwert: ${S('U', 'eff')} = û = <span class="eq-res-volt">${fVolt(ph.ueff)}</span>`, 'eq-sub')}
+      <div class="eq-note">Der Leiter bewegt sich mit konstantem Betrag der Geschwindigkeit hin und zurück. Daher entsteht in jeder Richtung eine konstante Spannung: positiv bei der Hinbewegung, negativ bei der Rückbewegung. Die Umkehr an den Endpunkten ist idealisiert (schlagartiger Richtungswechsel).</div>
+    </div>
+  </div>`;
+
+  // Rechteck: Hin- und Rückbewegung nebeneinander, Induktionsgesetz darunter über die volle Breite
+  out.innerHTML = waveform === 'rect'
+    ? rect + law.replace('class="eq-block eq-block-volt"', 'class="eq-block eq-block-volt eq-wide"') + forms + info
+    : law + sine + forms + info;
   updateLive();
 }
 
@@ -804,6 +897,8 @@ function updateLive() {
   set('live-u', `u<sub>i</sub> = ${ph.uhat < 1 ? fx(ph.u * 1000, 1).padStart(6, ' ') + ' mV' : fx(ph.u, 3).padStart(7, ' ') + ' V'}`);
   set('live-v', `<b>v</b> = ${fx(ph.vt, 2)} m/s`);
   set('live-t', `t = ${fx(simT, 2)} s`);
+  const dp = document.getElementById('dir-pos'), dn = document.getElementById('dir-neg');
+  if (dp && dn) { dp.classList.toggle('eq-active', ph.vt > 0); dn.classList.toggle('eq-active', ph.vt < 0); }
 }
 
 // =====================================================================
@@ -815,8 +910,19 @@ function frame(ts) {
   const dt = Math.min(0.05, (ts - lastFrame) / 1000);
   lastFrame = ts;
   if (running) {
-    phase += 2 * Math.PI / values.T * dt;
+    const omega = 2 * Math.PI / values.T;
+    const prevPhase = phase, prevT = simT;
+    phase += omega * dt;
     simT += dt;
+    // Rechteck: am exakten Umschaltzeitpunkt (Vielfache von π) zwei Punkte setzen → senkrechte Flanke im Plot
+    if (waveform === 'rect') {
+      const k0 = Math.floor(prevPhase / Math.PI), k1 = Math.floor(phase / Math.PI);
+      for (let k = k0 + 1; k <= k1; k++) {
+        const tc = prevT + (k * Math.PI - prevPhase) / omega;
+        const before = physics(k * Math.PI - 1e-9), after = physics(k * Math.PI + 1e-9);
+        samples.push({ t: tc, u: before.u, v: before.vt }, { t: tc, u: after.u, v: after.vt });
+      }
+    }
     const ph = physics(phase);
     samples.push({ t: simT, u: ph.u, v: ph.vt });
     const keep = simT - 2 * PARAMS.T.max - 1;
@@ -1304,7 +1410,7 @@ function initScene() {
     if (!built || Math.abs(W - built.W) > 1e-9) build(W);
     const b = built;
     const p = physics(ph);
-    const zr = -STROKE * Math.cos(ph);
+    const zr = rodZ(ph);
     const vn = values.v > 0 ? p.vt / values.v : 0;
     const un = p.uhat > 0 ? p.u / p.uhat : 0;
 
